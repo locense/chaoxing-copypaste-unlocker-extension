@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>学习通粘贴助手</title>
+    <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+    <header class="header">
+        <div class="brand">
+            <img src="../icons/icon48.png" alt="" width="32" height="32">
+            <div>
+                <h1>学习通粘贴助手</h1>
+                <p>输入行为辅助 · MV3</p>
+            </div>
+        </div>
+        <span id="page-badge" class="badge neutral">检测中</span>
+    </header>
+
+    <main>
+        <section class="card status-card" aria-labelledby="status-title">
+            <h2 id="status-title">当前页面状态</h2>
+            <div class="status-grid">
+                <span>页面匹配</span>
+                <strong id="status-match">检测中</strong>
+                <span>MAIN 注入</span>
+                <strong id="status-inject">检测中</strong>
+                <span>已注入帧</span>
+                <strong id="status-frames">0</strong>
+                <span>iframe</span>
+                <strong id="status-iframes">0 / 0</strong>
+                <span>事件监听</span>
+                <strong id="status-events">0 项</strong>
+            </div>
+            <p id="status-error" class="error" hidden></p>
+        </section>
+
+        <section class="card">
+            <label class="switch-row primary">
+                <span>
+                    <strong>总开关</strong>
+                    <small id="enabled-hint">关闭后页面不再受扩展影响</small>
+                </span>
+                <input id="enabled" type="checkbox">
+                <span class="switch" aria-hidden="true"></span>
+            </label>
+        </section>
+
+        <section class="card" aria-labelledby="events-title">
+            <div class="section-heading">
+                <h2 id="events-title">事件处理</h2>
+                <span>按需精简</span>
+            </div>
+            <div class="option-list">
+                <label class="check-row"><input type="checkbox" data-event="paste"><span>粘贴事件</span><em>推荐保留</em></label>
+                <label class="check-row"><input type="checkbox" data-event="copyCut"><span>复制 / 剪切</span><em>推荐保留</em></label>
+                <label class="check-row"><input type="checkbox" data-event="contextMenu"><span>右键菜单</span><em>推荐保留</em></label>
+                <label class="check-row"><input type="checkbox" data-event="keyboard"><span>键盘事件</span><em>兼容项</em></label>
+                <label class="check-row"><input type="checkbox" data-event="selection"><span>文本选择</span><em>推荐保留</em></label>
+                <label class="check-row"><input type="checkbox" data-event="drag"><span>拖拽开始</span><em>兼容项</em></label>
+                <label class="check-row"><input type="checkbox" data-event="mouse"><span>鼠标按下</span><em>兼容项</em></label>
+            </div>
+        </section>
+
+        <section class="card" aria-labelledby="display-title">
+            <div class="section-heading">
+                <h2 id="display-title">显示与诊断</h2>
+                <span>默认关闭</span>
+            </div>
+            <label class="switch-row compact">
+                <span><strong>页面状态面板</strong><small>在右上角显示运行状态</small></span>
+                <input id="showPanel" type="checkbox">
+                <span class="switch" aria-hidden="true"></span>
+            </label>
+            <label class="switch-row compact">
+                <span><strong>详细日志</strong><small>在网页控制台输出事件诊断</small></span>
+                <input id="debugLogs" type="checkbox">
+                <span class="switch" aria-hidden="true"></span>
+            </label>
+        </section>
+    </main>
+
+    <footer>
+        <span>v1.1.0</span>
+        <span>仅匹配 *.chaoxing.com</span>
+    </footer>
+
+    <script src="defaults.js"></script>
+    <script src="popup.js"></script>
+</body>
+</html>
