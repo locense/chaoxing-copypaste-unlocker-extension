@@ -8,6 +8,10 @@
 
 > A focused Chrome/Edge Manifest V3 extension that restores copy, cut, paste, context-menu and text-selection behavior on Chaoxing pages. It runs only on `https://*.chaoxing.com/*`, does not read clipboard contents, and does not automate quizzes or answers.
 
+## 搜索关键词
+
+学习通复制粘贴助手、学习通复制粘贴解除、学习通复制粘贴解锁、超星学习通复制粘贴、学习通不能复制粘贴、学习通右键解锁、学习通文本选择、Chrome 学习通扩展、Edge 学习通扩展、Chaoxing copy paste unlocker、Xuexitong copy paste extension。
+
 ## 项目状态
 
 - 当前版本：`1.1.0`
