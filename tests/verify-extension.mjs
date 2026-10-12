@@ -99,6 +99,9 @@ const contentScript = fs.readFileSync(path.join(root, 'src/content.js'), 'utf8')
 const background = fs.readFileSync(path.join(root, 'src/background.js'), 'utf8');
 
 assert(pageRuntime.includes('stopPropagation'), 'MAIN 运行时必须保留 stopPropagation');
+assert(pageRuntime.includes("closest('.CodeMirror')"), 'MAIN 运行时必须识别 CodeMirror 编辑器');
+assert(pageRuntime.includes('stopAtEditor'), 'MAIN 运行时必须包含 CodeMirror 内部事件桥接');
+assert(pageRuntime.includes('codeMirrorCount'), '运行状态必须报告 CodeMirror 数量');
 assert(pageRuntime.includes('MutationObserver') === false, 'MutationObserver 应由隔离环境内容脚本负责');
 assert(contentScript.includes('MutationObserver'), '内容脚本必须监听动态 DOM');
 assert(contentScript.includes('data-cx-paste-config'), '内容脚本必须向 MAIN 运行时写入配置');
