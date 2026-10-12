@@ -1,5 +1,12 @@
 # 变更记录
 
+## 1.2.2.2
+
+- 针对真实学习通 `mooc1-api` 作业页增加 `window.codeEditors` 注册表回退，兼容 `wrapper.CodeMirror` 属性不可用的情况。
+- 增加隐藏 `textarea` + `input` 事件的纯 DOM 降级粘贴，覆盖 MAIN world 无法访问页面对象的情况。
+- 运行状态新增可解析的 CodeMirror 实例数量。
+- 在真实作业页确认原生 `Ctrl+V` 受页面限制，扩展改为直接调用 CodeMirror 实例完成输入。
+
 ## 1.2.1
 
 - 将 MAIN 运行层提前到 `document_start`，在窗口捕获阶段接管 CodeMirror 的粘贴、复制和剪切。

@@ -4,13 +4,13 @@
     function pageRuntime(initialConfig) {
         'use strict';
 
-        const VERSION = '1.2.1';
+        const VERSION = '1.2.2-r3';
         const RUNTIME_FLAG = 'data-cx-paste-runtime';
         const CHANNEL_ATTRIBUTE = 'data-cx-paste-channel';
         const MESSAGE_SOURCE = 'cx-paste-extension';
         const ROUTE_EVENT = '__cx_paste_route_change__';
         const EARLY_EVENT_TYPES = Object.freeze(['paste', 'copy', 'cut', 'mousedown']);
-        const DESTROY_TOKEN = 'cx-paste-runtime-v1.2.1';
+        const DESTROY_TOKEN = 'cx-paste-runtime-v1.2.2-r3';
 
         const EVENT_GROUPS = Object.freeze({
             paste: Object.freeze(['paste']),
@@ -115,6 +115,45 @@
             return element.closest('.CodeMirror');
         }
 
+        function getBusinessIdFromElement(element) {
+            if (!element || typeof element.closest !== 'function') {
+                return '';
+            }
+
+            const container = element.closest('[data-business-id]');
+            return container
+                ? String(container.getAttribute('data-business-id') || '')
+                : '';
+        }
+
+        function getCodeMirrorInstance(root, target) {
+            if (!root) {
+                return null;
+            }
+
+            if (root.CodeMirror) {
+                return root.CodeMirror;
+            }
+
+            const businessId = getBusinessIdFromElement(root) || getBusinessIdFromElement(target);
+            let registry = null;
+
+            try {
+                registry = window.codeEditors;
+            } catch (_) {}
+
+            if (
+                businessId &&
+                registry &&
+                typeof registry === 'object' &&
+                registry[businessId]
+            ) {
+                return registry[businessId];
+            }
+
+            return null;
+        }
+
         function ensureCodeMirrorRootListener(root, type) {
             if (!root || typeof root.addEventListener !== 'function') {
                 return;
@@ -142,7 +181,7 @@
 
         function getCodeMirrorFromTarget(target) {
             const root = getCodeMirrorRoot(target);
-            const cm = root && root.CodeMirror;
+            const cm = getCodeMirrorInstance(root, target);
 
             if (!root || !cm) {
                 return null;
@@ -151,12 +190,8 @@
             return { root: root, cm: cm };
         }
 
-        function getActiveCodeMirror() {
-            if (!activeCodeMirrorRoot || !activeCodeMirrorRoot.CodeMirror) {
-                return null;
-            }
-
-            if (activeCodeMirrorRoot.isConnected === false) {
+        function getActiveCodeMirrorRoot() {
+            if (!activeCodeMirrorRoot || activeCodeMirrorRoot.isConnected === false) {
                 return null;
             }
 
@@ -164,14 +199,80 @@
                 return null;
             }
 
+            return activeCodeMirrorRoot;
+        }
+
+        function getActiveCodeMirror() {
+            const root = getActiveCodeMirrorRoot();
+            const cm = getCodeMirrorInstance(root, null);
+
+            if (!cm || !root) {
+                return null;
+            }
+
             return {
-                root: activeCodeMirrorRoot,
-                cm: activeCodeMirrorRoot.CodeMirror
+                root: root,
+                cm: cm
             };
         }
 
+        function getEventCodeMirrorRoot(event) {
+            return getCodeMirrorRoot(event.target) || getActiveCodeMirrorRoot();
+        }
+
         function getEventCodeMirror(event) {
-            return getCodeMirrorFromTarget(event.target) || getActiveCodeMirror();
+            const root = getEventCodeMirrorRoot(event);
+            const cm = getCodeMirrorInstance(root, event && event.target);
+
+            return cm ? { root: root, cm: cm } : null;
+        }
+
+        function handleTextareaPasteFallback(event) {
+            if (!config.enabled || config.events.paste === false) {
+                return false;
+            }
+
+            const clipboard = event && event.clipboardData;
+            if (!clipboard || typeof clipboard.getData !== 'function') {
+                return false;
+            }
+
+            const root = getEventCodeMirrorRoot(event);
+            const textarea = root && root.querySelector
+                ? root.querySelector('textarea')
+                : null;
+
+            if (!textarea) {
+                return false;
+            }
+
+            const text = clipboard.getData('text/plain') || clipboard.getData('Text');
+            if (typeof text !== 'string') {
+                return false;
+            }
+
+            try {
+                if (typeof textarea.focus === 'function') {
+                    textarea.focus();
+                }
+
+                textarea.value = text;
+
+                const inputEvent = typeof InputEvent === 'function'
+                    ? new InputEvent('input', {
+                        bubbles: true,
+                        data: text,
+                        inputType: 'insertFromPaste'
+                    })
+                    : new Event('input', { bubbles: true });
+
+                textarea.dispatchEvent(inputEvent);
+                event.preventDefault();
+                event.stopImmediatePropagation();
+                return true;
+            } catch (_) {
+                return false;
+            }
         }
 
         function handleCodeMirrorClipboard(event, type) {
@@ -189,7 +290,7 @@
 
             const found = getEventCodeMirror(event);
             if (!found) {
-                return false;
+                return type === 'paste' ? handleTextareaPasteFallback(event) : false;
             }
 
             const cm = found.cm;
@@ -232,7 +333,7 @@
                 event.stopImmediatePropagation();
                 return true;
             } catch (_) {
-                return false;
+                return type === 'paste' ? handleTextareaPasteFallback(event) : false;
             }
         }
 
@@ -404,6 +505,11 @@
                     '[contenteditable="true"], [contenteditable=""]'
                 ).length,
                 codeMirrorCount: document.querySelectorAll('.CodeMirror').length,
+                codeMirrorInstanceCount: Array.from(
+                    document.querySelectorAll('.CodeMirror')
+                ).filter(function (root) {
+                    return Boolean(getCodeMirrorInstance(root, null));
+                }).length,
                 updatedAt: Date.now()
             };
         }

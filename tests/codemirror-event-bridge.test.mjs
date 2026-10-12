@@ -54,12 +54,20 @@ class NodeStub {
             if (selector === '.CodeMirror' && String(node.className || '').split(/\s+/).includes('CodeMirror')) {
                 return node;
             }
+
+            if (selector === '[data-business-id]' && node.attributes.has('data-business-id')) {
+                return node;
+            }
         }
         return null;
     }
 
     querySelectorAll() {
         return [];
+    }
+
+    dispatchEvent(event) {
+        dispatch(this, event);
     }
 }
 
@@ -175,6 +183,11 @@ codeMirrorRoot.parentElement = document.body;
 
 const codeMirrorInput = new NodeStub('textarea');
 codeMirrorInput.parentElement = codeMirrorRoot;
+codeMirrorInput.value = '';
+codeMirrorRoot.querySelector = (selector) => selector === 'textarea' ? codeMirrorInput : null;
+codeMirrorInput.addEventListener('input', () => {
+    editorValue = codeMirrorInput.value;
+});
 
 const normalInput = new NodeStub('textarea');
 normalInput.parentElement = document.body;
@@ -216,7 +229,8 @@ const context = {
             this.type = type;
             this.detail = options && options.detail;
         }
-    }
+    },
+    Event: EventStub
 };
 context.globalThis = context;
 
@@ -293,5 +307,35 @@ normalInput.addEventListener('paste', () => {
 });
 dispatch(normalInput, new EventStub('paste'));
 assert(!normalReceived, '普通输入框仍应在 document 捕获阶段阻止页面事件传播');
+
+codeMirrorRoot.CodeMirror = null;
+codeMirrorRoot.setAttribute('data-business-id', 'test-business');
+window.codeEditors = {
+    'test-business': fakeEditor
+};
+editorValue = 'registry-original';
+
+const registryPasteEvent = new EventStub('paste');
+registryPasteEvent.clipboardData = {
+    getData(type) {
+        return type === 'text/plain' ? 'registry paste' : '';
+    }
+};
+dispatch(codeMirrorInput, registryPasteEvent);
+assert(editorValue === 'registry paste', '缺少 wrapper.CodeMirror 时必须通过页面注册表找到编辑器实例');
+
+codeMirrorRoot.CodeMirror = null;
+window.codeEditors = {};
+codeMirrorInput.value = '';
+editorValue = 'fallback-original';
+const fallbackPasteEvent = new EventStub('paste');
+fallbackPasteEvent.clipboardData = {
+    getData(type) {
+        return type === 'text/plain' ? 'fallback paste' : '';
+    }
+};
+dispatch(codeMirrorInput, fallbackPasteEvent);
+assert(editorValue === 'fallback paste', '无法访问 CodeMirror 对象时必须通过隐藏 textarea 和 input 事件完成粘贴');
+assert(fallbackPasteEvent.defaultPrevented, 'DOM 降级路径必须阻止页面默认粘贴行为');
 
 console.log('CodeMirror 事件桥接检查通过。');

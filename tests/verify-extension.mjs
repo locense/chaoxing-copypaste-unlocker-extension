@@ -39,10 +39,12 @@ for (const permission of forbidden) {
 
 assert(manifest.background?.service_worker === 'src/background.js', '缺少后台 Service Worker');
 assert(manifest.action?.default_popup === 'src/popup.html', '缺少弹窗入口');
-assert(Array.isArray(manifest.content_scripts) && manifest.content_scripts.length === 2, '必须声明 ISOLATED 和 MAIN 两层内容脚本');
-const isolatedScript = manifest.content_scripts.find((entry) => entry.world === 'ISOLATED');
+assert(Array.isArray(manifest.content_scripts) && manifest.content_scripts.length === 3, '必须声明早期隔离桥接、ISOLATED 和 MAIN 三层内容脚本');
+const isolatedScript = manifest.content_scripts.find((entry) => entry.world === 'ISOLATED' && entry.js.includes('src/content.js'));
+const isolatedClipboardScript = manifest.content_scripts.find((entry) => entry.world === 'ISOLATED' && entry.js.includes('src/isolated-clipboard.js'));
 const mainScript = manifest.content_scripts.find((entry) => entry.world === 'MAIN');
 assert(isolatedScript, '缺少 ISOLATED world 内容脚本');
+assert(isolatedClipboardScript, '缺少 ISOLATED world 早期剪贴板桥接脚本');
 assert(mainScript, '缺少 MAIN world 内容脚本');
 [isolatedScript, mainScript].forEach((entry) => {
     assert(entry.all_frames === true, '内容脚本必须启用 all_frames');
@@ -52,6 +54,7 @@ assert(mainScript, '缺少 MAIN world 内容脚本');
     );
 });
 assert(isolatedScript.run_at === 'document_idle', '隔离环境内容脚本必须使用 document_idle');
+assert(isolatedClipboardScript.run_at === 'document_start', '早期隔离剪贴板桥接必须使用 document_start');
 assert(mainScript.run_at === 'document_start', 'MAIN 运行层必须使用 document_start 提前注册窗口捕获处理');
 assert(isolatedScript.js.includes('src/defaults.js') && isolatedScript.js.includes('src/content.js'), 'ISOLATED 内容脚本文件不完整');
 assert(mainScript.js.includes('src/page-runtime.js'), 'MAIN 内容脚本缺少 page-runtime.js');
@@ -70,6 +73,7 @@ const requiredFiles = [
     'src/content.js',
     'src/defaults.js',
     'src/page-runtime.js',
+    'src/isolated-clipboard.js',
     'src/popup.css',
     'src/popup.html',
     'src/popup.js'
@@ -84,6 +88,7 @@ const javascriptFiles = [
     'src/content.js',
     'src/defaults.js',
     'src/page-runtime.js',
+    'src/isolated-clipboard.js',
     'src/popup.js'
 ];
 
@@ -105,6 +110,7 @@ assert(pageRuntime.includes('stopAtEditor'), 'MAIN 运行时必须包含 CodeMir
 assert(pageRuntime.includes('handleCodeMirrorClipboard'), 'MAIN 运行时必须包含早期 CodeMirror 剪贴板桥接');
 assert(pageRuntime.includes('EARLY_EVENT_TYPES'), 'MAIN 运行时必须声明早期窗口事件');
 assert(pageRuntime.includes('codeMirrorCount'), '运行状态必须报告 CodeMirror 数量');
+assert(pageRuntime.includes('window.codeEditors'), 'MAIN 运行时必须支持学习通全局 CodeMirror 注册表回退');
 assert(pageRuntime.includes('MutationObserver') === false, 'MutationObserver 应由隔离环境内容脚本负责');
 assert(contentScript.includes('MutationObserver'), '内容脚本必须监听动态 DOM');
 assert(contentScript.includes('data-cx-paste-config'), '内容脚本必须向 MAIN 运行时写入配置');

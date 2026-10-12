@@ -3,7 +3,7 @@
 
     const SETTINGS_KEY = 'settings';
     const INSTALL_INFO_KEY = 'installInfo';
-    const VERSION = '1.2.1';
+    const VERSION = '1.2.2-r3';
 
     const DEFAULT_SETTINGS = Object.freeze({
         enabled: true,
