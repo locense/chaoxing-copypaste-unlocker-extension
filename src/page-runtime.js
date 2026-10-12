@@ -4,11 +4,13 @@
     function pageRuntime(initialConfig) {
         'use strict';
 
-        const VERSION = '1.2.0';
+        const VERSION = '1.2.1';
         const RUNTIME_FLAG = 'data-cx-paste-runtime';
         const CHANNEL_ATTRIBUTE = 'data-cx-paste-channel';
         const MESSAGE_SOURCE = 'cx-paste-extension';
         const ROUTE_EVENT = '__cx_paste_route_change__';
+        const EARLY_EVENT_TYPES = Object.freeze(['paste', 'copy', 'cut', 'mousedown']);
+        const DESTROY_TOKEN = 'cx-paste-runtime-v1.2.1';
 
         const EVENT_GROUPS = Object.freeze({
             paste: Object.freeze(['paste']),
@@ -23,6 +25,7 @@
         const counter = Object.create(null);
         const listeners = new Map();
         const codeMirrorRoots = new Map();
+        const earlyListeners = new Map();
 
         let config = normalizeConfig(initialConfig && initialConfig.settings);
         let channel = String(
@@ -30,6 +33,8 @@
             document.documentElement?.getAttribute(CHANNEL_ATTRIBUTE) ||
             ''
         );
+        let activeCodeMirrorRoot = null;
+        let activeCodeMirrorUpdatedAt = 0;
         let historyHooked = false;
         let destroyed = false;
 
@@ -135,6 +140,182 @@
             handlers.set(type, stopAtEditor);
         }
 
+        function getCodeMirrorFromTarget(target) {
+            const root = getCodeMirrorRoot(target);
+            const cm = root && root.CodeMirror;
+
+            if (!root || !cm) {
+                return null;
+            }
+
+            return { root: root, cm: cm };
+        }
+
+        function getActiveCodeMirror() {
+            if (!activeCodeMirrorRoot || !activeCodeMirrorRoot.CodeMirror) {
+                return null;
+            }
+
+            if (activeCodeMirrorRoot.isConnected === false) {
+                return null;
+            }
+
+            if (Date.now() - activeCodeMirrorUpdatedAt > 10000) {
+                return null;
+            }
+
+            return {
+                root: activeCodeMirrorRoot,
+                cm: activeCodeMirrorRoot.CodeMirror
+            };
+        }
+
+        function getEventCodeMirror(event) {
+            return getCodeMirrorFromTarget(event.target) || getActiveCodeMirror();
+        }
+
+        function handleCodeMirrorClipboard(event, type) {
+            if (!config.enabled) {
+                return false;
+            }
+
+            if (type === 'paste' && config.events.paste === false) {
+                return false;
+            }
+
+            if ((type === 'copy' || type === 'cut') && config.events.copyCut === false) {
+                return false;
+            }
+
+            const found = getEventCodeMirror(event);
+            if (!found) {
+                return false;
+            }
+
+            const cm = found.cm;
+
+            try {
+                if (type === 'paste') {
+                    const clipboard = event.clipboardData;
+                    const text = clipboard && typeof clipboard.getData === 'function'
+                        ? (clipboard.getData('text/plain') || clipboard.getData('Text'))
+                        : '';
+
+                    if (typeof text !== 'string') {
+                        return false;
+                    }
+
+                    if (typeof cm.focus === 'function') {
+                        cm.focus();
+                    }
+                    cm.replaceSelection(text, 'end', 'paste');
+                } else {
+                    if (!event.clipboardData || typeof event.clipboardData.setData !== 'function') {
+                        return false;
+                    }
+
+                    const text = typeof cm.getSelection === 'function'
+                        ? cm.getSelection()
+                        : '';
+
+                    event.clipboardData.setData('text/plain', text);
+
+                    if (type === 'cut') {
+                        if (typeof cm.focus === 'function') {
+                            cm.focus();
+                        }
+                        cm.replaceSelection('', 'end', 'cut');
+                    }
+                }
+
+                event.preventDefault();
+                event.stopImmediatePropagation();
+                return true;
+            } catch (_) {
+                return false;
+            }
+        }
+
+        function rememberCodeMirrorMouseDown(event) {
+            const found = getCodeMirrorFromTarget(event.target);
+            if (!found) {
+                return;
+            }
+
+            activeCodeMirrorRoot = found.root;
+            activeCodeMirrorUpdatedAt = Date.now();
+
+            const cm = found.cm;
+            const clientX = Number(event.clientX || 0);
+            const clientY = Number(event.clientY || 0);
+
+            window.setTimeout(function () {
+                if (destroyed || activeCodeMirrorRoot !== found.root) {
+                    return;
+                }
+
+                try {
+                    if (typeof cm.hasFocus !== 'function' || cm.hasFocus()) {
+                        return;
+                    }
+
+                    if (
+                        (clientX || clientY) &&
+                        typeof cm.coordsChar === 'function' &&
+                        typeof cm.setCursor === 'function'
+                    ) {
+                        cm.setCursor(cm.coordsChar({
+                            left: clientX,
+                            top: clientY
+                        }));
+                    }
+
+                    if (typeof cm.focus === 'function') {
+                        cm.focus();
+                    }
+                } catch (_) {}
+            }, 0);
+        }
+
+        function makeEarlyHandler(type) {
+            return function handleEarlyEvent(event) {
+                if (!config.enabled) {
+                    return;
+                }
+
+                if (type === 'mousedown') {
+                    rememberCodeMirrorMouseDown(event);
+                    return;
+                }
+
+                handleCodeMirrorClipboard(event, type);
+            };
+        }
+
+        function updateEarlyListeners() {
+            const desired = new Set(desiredEventTypes());
+
+            Array.from(earlyListeners.entries()).forEach(function (entry) {
+                const type = entry[0];
+                const handler = entry[1];
+
+                if (!desired.has(type)) {
+                    window.removeEventListener(type, handler, true);
+                    earlyListeners.delete(type);
+                }
+            });
+
+            EARLY_EVENT_TYPES.forEach(function (type) {
+                if (!desired.has(type) || earlyListeners.has(type)) {
+                    return;
+                }
+
+                const handler = makeEarlyHandler(type);
+                window.addEventListener(type, handler, true);
+                earlyListeners.set(type, handler);
+            });
+        }
+
         function makeHandler(type) {
             return function handleEvent(event) {
                 counter[type] = (counter[type] || 0) + 1;
@@ -194,6 +375,8 @@
                 document.addEventListener(type, handler, true);
                 listeners.set(type, handler);
             });
+
+            updateEarlyListeners();
         }
 
         function isTopFrame() {
@@ -311,12 +494,17 @@
             postStatus();
         }
 
-        function destroy() {
-            if (destroyed) {
+        function destroy(token) {
+            if (destroyed || token !== DESTROY_TOKEN) {
                 return;
             }
 
             destroyed = true;
+
+            Array.from(earlyListeners.entries()).forEach(function (entry) {
+                window.removeEventListener(entry[0], entry[1], true);
+            });
+            earlyListeners.clear();
 
             Array.from(listeners.entries()).forEach(function (entry) {
                 document.removeEventListener(entry[0], entry[1], true);
@@ -352,7 +540,7 @@
 
         if (existing && typeof existing.destroy === 'function') {
             try {
-                existing.destroy();
+                existing.destroy(DESTROY_TOKEN);
             } catch (_) {}
         }
 
@@ -360,9 +548,22 @@
             channel = 'cx-page-' + Date.now() + '-' + Math.random().toString(36).slice(2);
         }
 
-        if (document.documentElement) {
+        function syncDocumentAttributes() {
+            if (!document.documentElement) {
+                return false;
+            }
+
             document.documentElement.setAttribute(CHANNEL_ATTRIBUTE, channel);
             document.documentElement.setAttribute(RUNTIME_FLAG, '1');
+            return true;
+        }
+
+        if (!syncDocumentAttributes()) {
+            document.addEventListener('readystatechange', function onReadyStateChange() {
+                if (syncDocumentAttributes()) {
+                    document.removeEventListener('readystatechange', onReadyStateChange, false);
+                }
+            }, false);
         }
 
         window.addEventListener('message', onMessage, false);

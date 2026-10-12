@@ -1,6 +1,6 @@
 {
     "name": "chaoxing-copypaste-unlocker-extension",
-    "version": "1.2.0",
+    "version": "1.2.1",
     "private": true,
     "description": "Chrome/Edge Manifest V3 extension for restoring copy, cut, paste, context-menu and text-selection behavior on Chaoxing pages.",
     "repository": {

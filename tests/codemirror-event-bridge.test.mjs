@@ -137,7 +137,7 @@ function dispatch(target, event) {
 
     event.target = target;
 
-    for (const node of path.slice().reverse().slice(1)) {
+    for (const node of path.slice().reverse().slice(0, -1)) {
         event.eventPhase = 1;
         if (!runListeners(node, event, true)) {
             return;
@@ -179,6 +179,28 @@ codeMirrorInput.parentElement = codeMirrorRoot;
 const normalInput = new NodeStub('textarea');
 normalInput.parentElement = document.body;
 
+let editorValue = 'original';
+let editorFocused = true;
+const fakeEditor = {
+    focus() {
+        editorFocused = true;
+    },
+    hasFocus() {
+        return editorFocused;
+    },
+    getSelection() {
+        return editorValue;
+    },
+    replaceSelection(text, _select, origin) {
+        editorValue = origin === 'cut' ? '' : text;
+    },
+    coordsChar() {
+        return { line: 0, ch: 0 };
+    },
+    setCursor() {}
+};
+codeMirrorRoot.CodeMirror = fakeEditor;
+
 document.allElements.push(codeMirrorRoot, codeMirrorInput, normalInput);
 document.documentElement.setAttribute('data-cx-paste-channel', 'test-channel');
 document.documentElement.setAttribute('data-cx-paste-config', JSON.stringify({ enabled: true }));
@@ -198,20 +220,60 @@ const context = {
 };
 context.globalThis = context;
 
+let pageCaptureSawClipboard = false;
+document.addEventListener('paste', (event) => {
+    pageCaptureSawClipboard = true;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+}, true);
+document.addEventListener('copy', (event) => {
+    pageCaptureSawClipboard = true;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+}, true);
+document.addEventListener('cut', (event) => {
+    pageCaptureSawClipboard = true;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+}, true);
+
 vm.runInNewContext(source, context, { filename: 'src/page-runtime.js' });
 
-let editorReceived = false;
-let pageSawEditorPaste = false;
-codeMirrorInput.addEventListener('paste', () => {
-    editorReceived = true;
-});
-document.addEventListener('paste', () => {
-    pageSawEditorPaste = true;
-});
+const pasteEvent = new EventStub('paste');
+pasteEvent.clipboardData = {
+    getData(type) {
+        return type === 'text/plain' ? 'pasted text' : '';
+    }
+};
+dispatch(codeMirrorInput, pasteEvent);
+assert(editorValue === 'pasted text', '早期窗口桥接必须把粘贴内容写入 CodeMirror');
+assert(pasteEvent.defaultPrevented, '早期窗口桥接必须阻止页面默认粘贴逻辑');
+assert(!pageCaptureSawClipboard, '页面在 document 捕获阶段不应先于 CodeMirror 收到粘贴事件');
 
-dispatch(codeMirrorInput, new EventStub('paste'));
-assert(editorReceived, 'CodeMirror 内部粘贴监听器必须收到事件');
-assert(!pageSawEditorPaste, 'CodeMirror 处理完事件后不应继续冒泡到页面限制监听器');
+let copiedText = '';
+const copyEvent = new EventStub('copy');
+copyEvent.clipboardData = {
+    setData(type, value) {
+        if (type === 'text/plain') {
+            copiedText = value;
+        }
+    }
+};
+dispatch(codeMirrorInput, copyEvent);
+assert(copiedText === 'pasted text', '早期窗口桥接必须把 CodeMirror 选中内容写入剪贴板事件');
+
+const cutEvent = new EventStub('cut');
+cutEvent.clipboardData = {
+    setData(type, value) {
+        if (type === 'text/plain') {
+            copiedText = value;
+        }
+    }
+};
+dispatch(codeMirrorInput, cutEvent);
+assert(copiedText === 'pasted text', '剪切事件必须先复制 CodeMirror 当前选中内容');
+assert(editorValue === '', '剪切事件必须从 CodeMirror 删除当前选中内容');
+assert(!pageCaptureSawClipboard, '页面在 document 捕获阶段不应先于 CodeMirror 收到剪贴板事件');
 
 let editorReceivedMouseDown = false;
 let pageSawEditorMouseDown = false;

@@ -46,12 +46,13 @@ assert(isolatedScript, '缺少 ISOLATED world 内容脚本');
 assert(mainScript, '缺少 MAIN world 内容脚本');
 [isolatedScript, mainScript].forEach((entry) => {
     assert(entry.all_frames === true, '内容脚本必须启用 all_frames');
-    assert(entry.run_at === 'document_idle', '内容脚本必须使用 document_idle');
     assert(
         JSON.stringify(entry.matches) === JSON.stringify(['https://*.chaoxing.com/*']),
         '内容脚本匹配范围必须限制在学习通 HTTPS 域名'
     );
 });
+assert(isolatedScript.run_at === 'document_idle', '隔离环境内容脚本必须使用 document_idle');
+assert(mainScript.run_at === 'document_start', 'MAIN 运行层必须使用 document_start 提前注册窗口捕获处理');
 assert(isolatedScript.js.includes('src/defaults.js') && isolatedScript.js.includes('src/content.js'), 'ISOLATED 内容脚本文件不完整');
 assert(mainScript.js.includes('src/page-runtime.js'), 'MAIN 内容脚本缺少 page-runtime.js');
 
@@ -101,6 +102,8 @@ const background = fs.readFileSync(path.join(root, 'src/background.js'), 'utf8')
 assert(pageRuntime.includes('stopPropagation'), 'MAIN 运行时必须保留 stopPropagation');
 assert(pageRuntime.includes("closest('.CodeMirror')"), 'MAIN 运行时必须识别 CodeMirror 编辑器');
 assert(pageRuntime.includes('stopAtEditor'), 'MAIN 运行时必须包含 CodeMirror 内部事件桥接');
+assert(pageRuntime.includes('handleCodeMirrorClipboard'), 'MAIN 运行时必须包含早期 CodeMirror 剪贴板桥接');
+assert(pageRuntime.includes('EARLY_EVENT_TYPES'), 'MAIN 运行时必须声明早期窗口事件');
 assert(pageRuntime.includes('codeMirrorCount'), '运行状态必须报告 CodeMirror 数量');
 assert(pageRuntime.includes('MutationObserver') === false, 'MutationObserver 应由隔离环境内容脚本负责');
 assert(contentScript.includes('MutationObserver'), '内容脚本必须监听动态 DOM');
