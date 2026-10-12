@@ -2,7 +2,7 @@
     "manifest_version": 3,
     "name": "学习通复制粘贴助手",
     "short_name": "学习通粘贴助手",
-    "version": "1.1.0",
+    "version": "1.2.0",
     "description": "解除学习通页面的复制、剪切、粘贴、右键和文本选择限制，支持 MAIN 环境与嵌套 iframe。",
     "minimum_chrome_version": "111",
     "icons": {

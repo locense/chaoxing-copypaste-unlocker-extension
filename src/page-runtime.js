@@ -4,7 +4,7 @@
     function pageRuntime(initialConfig) {
         'use strict';
 
-        const VERSION = '1.1.0';
+        const VERSION = '1.2.0';
         const RUNTIME_FLAG = 'data-cx-paste-runtime';
         const CHANNEL_ATTRIBUTE = 'data-cx-paste-channel';
         const MESSAGE_SOURCE = 'cx-paste-extension';
@@ -22,6 +22,7 @@
 
         const counter = Object.create(null);
         const listeners = new Map();
+        const codeMirrorRoots = new Map();
 
         let config = normalizeConfig(initialConfig && initialConfig.settings);
         let channel = String(
@@ -97,6 +98,43 @@
             return Boolean((event.ctrlKey || event.metaKey) && (key === 'v' || key === 'c' || key === 'x'));
         }
 
+        function getCodeMirrorRoot(target) {
+            const element = target && target.nodeType === 1
+                ? target
+                : target && target.parentElement;
+
+            if (!element || typeof element.closest !== 'function') {
+                return null;
+            }
+
+            return element.closest('.CodeMirror');
+        }
+
+        function ensureCodeMirrorRootListener(root, type) {
+            if (!root || typeof root.addEventListener !== 'function') {
+                return;
+            }
+
+            let handlers = codeMirrorRoots.get(root);
+            if (!handlers) {
+                handlers = new Map();
+                codeMirrorRoots.set(root, handlers);
+            }
+
+            if (handlers.has(type)) {
+                return;
+            }
+
+            function stopAtEditor(event) {
+                if (config.enabled && listeners.has(type)) {
+                    event.stopPropagation();
+                }
+            }
+
+            root.addEventListener(type, stopAtEditor, false);
+            handlers.set(type, stopAtEditor);
+        }
+
         function makeHandler(type) {
             return function handleEvent(event) {
                 counter[type] = (counter[type] || 0) + 1;
@@ -119,6 +157,13 @@
                 }
 
                 if (config.enabled) {
+                    const codeMirrorRoot = getCodeMirrorRoot(event.target);
+
+                    if (codeMirrorRoot) {
+                        ensureCodeMirrorRootListener(codeMirrorRoot, type);
+                        return;
+                    }
+
                     event.stopPropagation();
                 }
             };
@@ -175,6 +220,7 @@
                 contenteditableCount: document.querySelectorAll(
                     '[contenteditable="true"], [contenteditable=""]'
                 ).length,
+                codeMirrorCount: document.querySelectorAll('.CodeMirror').length,
                 updatedAt: Date.now()
             };
         }
@@ -276,6 +322,14 @@
                 document.removeEventListener(entry[0], entry[1], true);
             });
             listeners.clear();
+
+            codeMirrorRoots.forEach(function (handlers, root) {
+                handlers.forEach(function (handler, type) {
+                    root.removeEventListener(type, handler, false);
+                });
+            });
+            codeMirrorRoots.clear();
+
             window.removeEventListener('message', onMessage);
             window.removeEventListener('popstate', notifyRouteChange);
 
